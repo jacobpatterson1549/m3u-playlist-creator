@@ -156,6 +156,7 @@ func TestRunCommands(t *testing.T) {
 		{path: "d.mp3", artist: "b", album: "c", title: "d", track: 1},
 	}
 	commands := []string{
+		"",           // empty command
 		"h",          // print help
 		"l prev.m3u", // load a playlist
 		"c",          // clear the playlist

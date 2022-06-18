@@ -14,8 +14,10 @@ To list the distribution of file types in a folder, run `find -type f | sed 's/.
 
 ## Building
 
-Build the application with `go build ./...` and it run with `./m3u-playlist-creator`
+The following examples build all executables to a `./build` folder.  Move the executable application to the base location of the music files for the playlists.
 
-Build a Windows version of the application with `GOOS=windows GOARCH=amd64 go build -o m3u-playlist-creator.exe ./...`
+Build the application with `go build ./... -o build/m3u-playlist-creator`
+
+Build a Windows version of the application with `GOOS=windows GOARCH=amd64 go build -o build/m3u-playlist-creator.exe`
 
 Run tests with `go test ./... --cover`

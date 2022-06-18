@@ -215,10 +215,9 @@ func (p *playlist) load(m3uPath string) {
 	display := ""
 	for s.Scan() {
 		line := s.Text()
-		if len(line) == 0 {
-			continue
-		}
 		switch {
+		case len(line) == 0:
+			// NOOP
 		case line[0] == '#':
 			// comment
 			if strings.HasPrefix(line, "#EXTINF:") {
@@ -271,7 +270,6 @@ func (p *playlist) write(m3uPath string) {
 	for _, t := range p.tracks {
 		data = append(data, fmt.Sprintf("#EXTINF:0, %v\r\n%v\r\n", t.display, t.path)...)
 	}
-	_ = f
 	if err := p.fsys.WriteFile(m3uPath, data); err != nil {
 		fmt.Fprintf(p.w, "Error (write playlist): writing m3u file: %v\n", err)
 	}
