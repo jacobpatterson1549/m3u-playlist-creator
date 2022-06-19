@@ -21,7 +21,7 @@ const (
 	emptyMp3Artist = "MY_ARTIST0"
 )
 
-func TestOsFSWriteFile(t *testing.T) {
+func TestOsFSCreateFile(t *testing.T) {
 	tests := []struct {
 		name     string
 		osFS     osFS
@@ -34,11 +34,22 @@ func TestOsFSWriteFile(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name:     "write error",
-			destPath: "sub/list.m3u",
+			name:     "error creating file",
+			destPath: "list.m3u",
 			osFS: osFS{
-				writeFileFunc: func(name string, data []byte) error {
-					return fmt.Errorf("error writing file")
+				FS: fstest.MapFS{},
+				createFileFunc: func(name string) (io.WriteCloser, error) {
+					return nil, fmt.Errorf("error creating file")
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name:     "file exists",
+			destPath: "list.m3u",
+			osFS: osFS{
+				FS: fstest.MapFS{
+					"list.m3u": &fstest.MapFile{},
 				},
 			},
 			wantErr: true,
@@ -47,24 +58,30 @@ func TestOsFSWriteFile(t *testing.T) {
 			name:     "ok",
 			destPath: "list.m3u",
 			osFS: osFS{
-				writeFileFunc: func(name string, data []byte) error {
+				FS: fstest.MapFS{},
+				createFileFunc: func(name string) (io.WriteCloser, error) {
 					if want, got := "list.m3u", name; want != got {
-						return fmt.Errorf("file names not equal: \n wanted: %v \n got:    %q", want, got)
+						return nil, fmt.Errorf("file names not equal: \n wanted: %v \n got:    %q", want, got)
 
 					}
-					if want, got := "hello", string(data); want != got {
-						return fmt.Errorf("file data not equal: \n wanted: %q \n got:    %q", want, got)
-					}
-					return nil
+					w := new(MockWriteCloser)
+					return w, nil
 				},
 			},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := test.osFS.WriteFile(test.destPath, []byte("hello"))
-			if want, got := test.wantErr, err != nil; want != got {
-				t.Errorf("wanted error: %v, got: %v", want, err)
+			w, err := test.osFS.CreateFile(test.destPath)
+			switch {
+			case test.wantErr:
+				if err == nil {
+					t.Error("wanted error")
+				}
+			case err != nil:
+				t.Errorf("unwanted error: %v", err)
+			case w == nil:
+				t.Error("file not created")
 			}
 		})
 	}
@@ -114,53 +131,6 @@ func TestOsFSReadFile(t *testing.T) {
 				t.Errorf("unwanted error: %v", err)
 			case want != string(got):
 				t.Errorf("file data not equal: \n wanted: %q \n got:    %q", want, string(got))
-			}
-		})
-	}
-}
-
-func TestOsFSStat(t *testing.T) {
-	tests := []struct {
-		name    string
-		osFS    osFS
-		path    string
-		wantErr bool
-	}{
-		{
-			name:    "might note be not child of executablePath",
-			path:    "/e/g/list.m3u",
-			wantErr: true,
-		},
-		{
-			name: "file not found",
-			path: "list.m3u",
-			osFS: osFS{
-				FS: fstest.MapFS{},
-			},
-			wantErr: true,
-		},
-		{
-			name: "ok",
-			path: "list.m3u",
-			osFS: osFS{
-				FS: fstest.MapFS{
-					"list.m3u": &fstest.MapFile{},
-				},
-			},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			info, err := test.osFS.Stat(test.path)
-			switch {
-			case test.wantErr:
-				if err == nil {
-					t.Error("wanted error")
-				}
-			case err != nil:
-				t.Errorf("unwanted error: %v", err)
-			case info == nil:
-				t.Error("wanted FileInfo")
 			}
 		})
 	}
@@ -320,8 +290,12 @@ func TestRunCommands(t *testing.T) {
 	joinedCommands := strings.Join(commands, "\n")
 	input := strings.NewReader(joinedCommands)
 	var output bytes.Buffer
-	want := []byte("#EXTM3U\r\n#EXTINF:0, song\r\ne.mp3\r\n")
-	var got []byte
+	want := "#EXTM3U\r\n#EXTINF:0, song\r\ne.mp3\r\n"
+	f := MockWriteCloser{
+		closeFunc: func() error {
+			return nil
+		},
+	}
 	fsys := osFS{
 		FS: fstest.MapFS{
 			"e.mp3": {},
@@ -330,19 +304,28 @@ func TestRunCommands(t *testing.T) {
 				Data: []byte("d.mp3"),
 			},
 		},
-		writeFileFunc: func(name string, data []byte) error {
+		createFileFunc: func(name string) (io.WriteCloser, error) {
 			if want, got := "curr.m3u", name; want != got {
 				t.Errorf("new playlist names not equal: wanted %q, got %q", want, got)
 			}
-			got = data
-			return nil
+
+			return &f, nil
 		},
 	}
 	runCommands(songs, fsys, input, &output)
 	switch {
 	case output.Len() == 0:
 		t.Errorf("no output written")
-	case string(want) != string(got):
-		t.Errorf("created playlist not equal: \n wanted: %q \n got:    %q", string(want), string(got))
+	case want != f.String():
+		t.Errorf("created playlist not equal: \n wanted: %q \n got:    %q", want, f.String())
 	}
+}
+
+type MockWriteCloser struct {
+	strings.Builder
+	closeFunc func() error
+}
+
+func (w MockWriteCloser) Close() error {
+	return w.closeFunc()
 }

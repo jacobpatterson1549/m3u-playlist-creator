@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"io/fs"
@@ -12,9 +11,8 @@ import (
 )
 
 type playlistFS interface {
-	fs.StatFS
-	fs.ReadFileFS
-	WriteFile(name string, data []byte) error
+	fs.FS
+	CreateFile(name string) (io.WriteCloser, error)
 }
 
 type playlist struct {
@@ -197,24 +195,31 @@ func (p *playlist) clearTracks(_ string) {
 
 // load imports a playlist by name
 func (p *playlist) load(m3uPath string) {
-	buf, err := p.fsys.ReadFile(m3uPath)
+	f, err := p.fsys.Open(m3uPath)
 	if err != nil {
 		fmt.Fprintf(p.w, "Error (load playlist): loading playlist file: %v\n", err)
 		return
 	}
+	if _, err := p.ReadFrom(f); err != nil {
+		fmt.Fprintf(p.w, "Error (load playlist): %v", err)
+	}
+}
+
+// ReadFrom reads the playlist tracks from the reader, updating the playlist contain all valid songs in the file
+func (p *playlist) ReadFrom(r io.Reader) (n int64, err error) {
 	songPaths := make(map[string]song, len(p.songs))
 	for _, s := range p.songs {
 		songPaths[s.path] = s
 	}
-	r := bytes.NewBuffer(buf)
-	br := bufio.NewReader(r)
-	s := bufio.NewScanner(br)
+	s := bufio.NewScanner(r)
 	var tracks []m3uTrack
+	var t m3uTrack
 	var errors []string
 	const maxErrors = 10
 	display := ""
 	for s.Scan() {
 		line := s.Text()
+		n += int64(len(line))
 		switch {
 		case len(line) == 0:
 			// NOOP
@@ -228,31 +233,43 @@ func (p *playlist) load(m3uPath string) {
 			}
 		default:
 			// treat line as path
-			if s, ok := songPaths[line]; ok {
-				if len(display) == 0 {
-					display = s.display()
-				}
-				t := m3uTrack{
-					song:    s,
-					display: display,
-				}
+			t, err = getTrack(line, songPaths, display)
+			switch {
+			case err == nil:
 				tracks = append(tracks, t)
-			} else {
-				// path not found
-				switch {
-				case len(errors) < maxErrors:
-					errors = append(errors, fmt.Sprintf("Error (load playlist): music file not found: %q", line))
-				case len(errors) == maxErrors:
-					errors = append(errors, "Error (load playlist): ... additional errors not displayed")
-				}
+			case len(errors) < maxErrors:
+				errors = append(errors, fmt.Sprintf("song not found: %q", line))
+			case len(errors) == maxErrors:
+				errors = append(errors, "... additional song load errors not displayed")
 			}
 			display = ""
 		}
 	}
-	p.tracks = tracks
-	for _, e := range errors {
-		fmt.Fprintln(p.w, e)
+	switch {
+	case s.Err() != nil:
+		err = s.Err()
+		return
+	case len(errors) != 0:
+		err = fmt.Errorf("loading playlist songs: %v", strings.Join(errors, "\n"))
 	}
+	p.tracks = tracks
+	return
+}
+
+func getTrack(line string, songPaths map[string]song, display string) (t m3uTrack, err error) {
+	s, ok := songPaths[line]
+	if !ok {
+		err = fmt.Errorf("song not found: %q", line)
+		return
+	}
+	if len(display) == 0 {
+		display = s.display()
+	}
+	t = m3uTrack{
+		song:    s,
+		display: display,
+	}
+	return t, nil
 }
 
 // write exports the playlist to a new file by name
@@ -261,18 +278,32 @@ func (p *playlist) write(m3uPath string) {
 		fmt.Fprintf(p.w, "Error (write playlist): path must end with .m3u, got %q\n", m3uPath)
 		return
 	}
-	f, err := p.fsys.Stat(m3uPath)
-	if err == nil || f != nil {
-		fmt.Fprintf(p.w, "Error (write playlist): m3u file exists or is corrupted: %v\n", err)
+	f, err := p.fsys.CreateFile(m3uPath)
+	if err != nil {
+		fmt.Fprintf(p.w, "Error (write playlist): creating file: %v", err)
 		return
 	}
-	data := []byte("#EXTM3U\r\n")
-	for _, t := range p.tracks {
-		data = append(data, fmt.Sprintf("#EXTINF:0, %v\r\n%v\r\n", t.display, t.path)...)
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Fprintf(p.w, "Error (closing %q): %v", m3uPath, err)
+		}
+	}()
+	if _, err := p.WriteTo(f); err != nil {
+		fmt.Fprintf(p.w, "Error (writing tracks): %v", err)
+		return
 	}
-	if err := p.fsys.WriteFile(m3uPath, data); err != nil {
-		fmt.Fprintf(p.w, "Error (write playlist): writing m3u file: %v\n", err)
+}
+
+// WriteTo writes the tracks of the playlist
+func (p playlist) WriteTo(w io.Writer) (n int64, err error) {
+	n2, err := fmt.Fprint(w, "#EXTM3U\r\n")
+	n += int64(n2)
+	for i := 0; err == nil && i < len(p.tracks); i++ {
+		t := p.tracks[i]
+		n2, err = fmt.Fprintf(w, "#EXTINF:0, %v\r\n%v\r\n", t.display, t.path)
+		n += int64(n2)
 	}
+	return
 }
 
 // songLess creates a song function that compares song indices by artist, album, track, then title

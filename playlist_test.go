@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"testing"
 	"testing/fstest"
 )
@@ -636,21 +637,12 @@ j/h.mp3
 }
 
 func TestPlaylistWrite(t *testing.T) {
-	bytesEqual := func(want, got []byte) bool {
-		if len(want) != len(got) {
-			return false
-		}
-		for i := range want {
-			if want[i] != got[i] {
-				return false
-			}
-		}
-		return true
-	}
+	var f io.WriteCloser
 	tests := []struct {
 		name    string
 		m3uPath string
 		p       playlist
+		want    string
 		wantErr bool
 	}{
 		{
@@ -685,8 +677,26 @@ func TestPlaylistWrite(t *testing.T) {
 			p: playlist{
 				fsys: osFS{
 					FS: fstest.MapFS{},
-					writeFileFunc: func(name string, data []byte) error {
-						return fmt.Errorf("mock write error")
+					createFileFunc: func(name string) (io.WriteCloser, error) {
+						return nil, fmt.Errorf("create write error")
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name:    "close file error",
+			m3uPath: "new.m3u",
+			p: playlist{
+				fsys: osFS{
+					FS: fstest.MapFS{},
+					createFileFunc: func(name string) (io.WriteCloser, error) {
+						f = &MockWriteCloser{
+							closeFunc: func() error {
+								return fmt.Errorf("close error")
+							},
+						}
+						return f, nil
 					},
 				},
 			},
@@ -703,33 +713,44 @@ func TestPlaylistWrite(t *testing.T) {
 				},
 				fsys: osFS{
 					FS: fstest.MapFS{},
-					writeFileFunc: func(name string, data []byte) error {
+					createFileFunc: func(name string) (io.WriteCloser, error) {
 						if want, got := "new.m3u", name; want != got {
-							return fmt.Errorf("names not equal: wanted %q, got %q", want, got)
+							return nil, fmt.Errorf("names not equal: wanted %q, got %q", want, got)
 						}
-						want := []byte("#EXTM3U\r\n" +
-							"#EXTINF:0, track 1\r\n" +
-							"a/b.mp3\r\n" +
-							"#EXTINF:0, track 2\r\n" +
-							"r/b.mp3\r\n" +
-							"#EXTINF:0, Track 1, again :)\r\n" +
-							"a/b.mp3\r\n")
-						if got := data; !bytesEqual(want, got) {
-							return fmt.Errorf("file bytes not equal: \n wanted: %q \n got:    %q", want, got)
+						f = &MockWriteCloser{
+							closeFunc: func() error {
+								return nil // TODO: test close error
+							},
 						}
-						return nil
+						return f, nil
 					},
 				},
 			},
+			want: "#EXTM3U\r\n" +
+				"#EXTINF:0, track 1\r\n" +
+				"a/b.mp3\r\n" +
+				"#EXTINF:0, track 2\r\n" +
+				"r/b.mp3\r\n" +
+				"#EXTINF:0, Track 1, again :)\r\n" +
+				"a/b.mp3\r\n",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			f = new(MockWriteCloser)
 			var w bytes.Buffer
 			test.p.w = &w
 			test.p.write(test.m3uPath)
-			if want, got := test.wantErr, w.Len() != 0; want != got {
-				t.Errorf("wanted logged error: %v, got %q", want, w.String())
+			gotErr := w.Len() != 0
+			switch {
+			case test.wantErr:
+				if !gotErr {
+					t.Error("wanted error")
+				}
+			case gotErr:
+				t.Errorf("unwanted error: %v", w.String())
+			case test.want != f.(*MockWriteCloser).String():
+				t.Errorf("file populated as desired: \n wanted: %q \n got:    %q", test.want, f.(*MockWriteCloser).String())
 			}
 		})
 	}

@@ -17,8 +17,8 @@ func main() {
 	w := os.Stdout
 	fsys := osFS{
 		FS: os.DirFS("."),
-		writeFileFunc: func(name string, data []byte) error {
-			return os.WriteFile(name, data, 0666)
+		createFileFunc: func(name string) (io.WriteCloser, error) {
+			return os.Create(name)
 		},
 	}
 	songs, err := countSeconds(readSongs, fsys, w)
@@ -35,14 +35,18 @@ func main() {
 
 type osFS struct {
 	fs.FS
-	writeFileFunc func(name string, data []byte) error
+	createFileFunc func(name string) (io.WriteCloser, error)
 }
 
-func (fsys osFS) WriteFile(name string, data []byte) error {
+func (fsys osFS) CreateFile(name string) (io.WriteCloser, error) {
 	if !fs.ValidPath(name) {
-		return fmt.Errorf("%q bust be relative to application root", name)
+		return nil, fmt.Errorf("%q bust be relative to application root", name)
 	}
-	return fsys.writeFileFunc(name, data)
+	_, err := fs.Stat(fsys, name)
+	if _, ok := err.(*os.PathError); !ok {
+		return nil, fmt.Errorf("%q already exists or could not be checked: %v", name, err)
+	}
+	return fsys.createFileFunc(name)
 }
 
 func (fsys osFS) ReadFile(name string) ([]byte, error) {
@@ -50,13 +54,6 @@ func (fsys osFS) ReadFile(name string) ([]byte, error) {
 		return nil, fmt.Errorf("%q must be relative to application root", name)
 	}
 	return fs.ReadFile(fsys.FS, name)
-}
-
-func (fsys osFS) Stat(name string) (fs.FileInfo, error) {
-	if !fs.ValidPath(name) {
-		return nil, fmt.Errorf("%q must be relative to application root", name)
-	}
-	return fs.Stat(fsys.FS, name)
 }
 
 func readSongs(fsys fs.FS) (songs []song, err error) {
@@ -160,13 +157,13 @@ func (cmds commands) toLookup(w io.Writer) (map[string]func(s string), error) {
 func (cmds commands) run(r io.Reader, w io.Writer) {
 	lookup, err := cmds.toLookup(w)
 	if err != nil {
-		fmt.Fprintf(w, "Error (running commands): %v", err)
+		fmt.Fprintf(w, "Error (preparing to run commands): %v", err)
 		return
 	}
 	s := bufio.NewScanner(r)
 	var (
 		line, key, args string
-		f []string
+		commandTokens   []string
 		cmd             func(s string)
 		ok              bool
 	)
@@ -180,8 +177,8 @@ func (cmds commands) run(r io.Reader, w io.Writer) {
 			return
 		}
 		ok = false
-		if f = strings.Fields(line); len(f) != 0 {
-			key, args = f[0], strings.TrimSpace(line[len(f[0]):])
+		if commandTokens = strings.Fields(line); len(commandTokens) != 0 {
+			key, args = commandTokens[0], strings.TrimSpace(line[len(commandTokens[0]):])
 			cmd, ok = lookup[key]
 			if ok {
 				cmd(args)
