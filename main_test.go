@@ -21,6 +21,151 @@ const (
 	emptyMp3Artist = "MY_ARTIST0"
 )
 
+func TestOsFSWriteFile(t *testing.T) {
+	tests := []struct {
+		name     string
+		osFS     osFS
+		destPath string
+		wantErr  bool
+	}{
+		{
+			name:     "might note be not child of executablePath",
+			destPath: "/e/g/list.m3u",
+			wantErr:  true,
+		},
+		{
+			name:     "write error",
+			destPath: "sub/list.m3u",
+			osFS: osFS{
+				writeFileFunc: func(name string, data []byte) error {
+					return fmt.Errorf("error writing file")
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name:     "ok",
+			destPath: "list.m3u",
+			osFS: osFS{
+				writeFileFunc: func(name string, data []byte) error {
+					if want, got := "list.m3u", name; want != got {
+						return fmt.Errorf("file names not equal: \n wanted: %v \n got:    %q", want, got)
+
+					}
+					if want, got := "hello", string(data); want != got {
+						return fmt.Errorf("file data not equal: \n wanted: %q \n got:    %q", want, got)
+					}
+					return nil
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.osFS.WriteFile(test.destPath, []byte("hello"))
+			if want, got := test.wantErr, err != nil; want != got {
+				t.Errorf("wanted error: %v, got: %v", want, err)
+			}
+		})
+	}
+}
+
+func TestOsFSReadFile(t *testing.T) {
+	const path = "list.m3u"
+	const want = "hello"
+	tests := []struct {
+		name     string
+		osFS     osFS
+		destPath string
+		wantErr  bool
+	}{
+		{
+			name:     "might note be not child of executablePath",
+			destPath: "/" + path,
+			wantErr:  true,
+		},
+		{
+			name:     "file not found",
+			destPath: path,
+			osFS: osFS{
+				FS: fstest.MapFS{},
+			},
+			wantErr: true,
+		},
+		{
+			name:     "ok",
+			destPath: path,
+			osFS: osFS{
+				FS: fstest.MapFS{
+					path: &fstest.MapFile{Data: []byte(want)},
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := test.osFS.ReadFile(test.destPath)
+			switch {
+			case test.wantErr:
+				if err == nil {
+					t.Error("wanted error")
+				}
+			case err != nil:
+				t.Errorf("unwanted error: %v", err)
+			case want != string(got):
+				t.Errorf("file data not equal: \n wanted: %q \n got:    %q", want, string(got))
+			}
+		})
+	}
+}
+
+func TestOsFSStat(t *testing.T) {
+	tests := []struct {
+		name    string
+		osFS    osFS
+		path    string
+		wantErr bool
+	}{
+		{
+			name:    "might note be not child of executablePath",
+			path:    "/e/g/list.m3u",
+			wantErr: true,
+		},
+		{
+			name: "file not found",
+			path: "list.m3u",
+			osFS: osFS{
+				FS: fstest.MapFS{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "ok",
+			path: "list.m3u",
+			osFS: osFS{
+				FS: fstest.MapFS{
+					"list.m3u": &fstest.MapFile{},
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			info, err := test.osFS.Stat(test.path)
+			switch {
+			case test.wantErr:
+				if err == nil {
+					t.Error("wanted error")
+				}
+			case err != nil:
+				t.Errorf("unwanted error: %v", err)
+			case info == nil:
+				t.Error("wanted FileInfo")
+			}
+		})
+	}
+}
+
 func mockMp3(s song) []byte {
 	data := make([]byte, len(emptyMP3))
 	copy(data, emptyMP3)
@@ -146,7 +291,7 @@ func TestRunCommands(t *testing.T) {
 	t.Run("EOF", func(t *testing.T) {
 		r := strings.NewReader("")
 		w := io.Discard
-		var fsys mockFS
+		var fsys osFS
 		var songs []song
 		runCommands(songs, fsys, r, w)
 	})
@@ -177,8 +322,8 @@ func TestRunCommands(t *testing.T) {
 	var output bytes.Buffer
 	want := []byte("#EXTM3U\r\n#EXTINF:0, song\r\ne.mp3\r\n")
 	var got []byte
-	fsys := mockFS{
-		MapFS: fstest.MapFS{
+	fsys := osFS{
+		FS: fstest.MapFS{
 			"e.mp3": {},
 			"d.mp3": {},
 			"prev.m3u": &fstest.MapFile{

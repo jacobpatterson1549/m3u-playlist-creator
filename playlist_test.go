@@ -18,7 +18,7 @@ func TestNewPlaylist(t *testing.T) {
 			{artist: "b", album: "c", title: "d"},
 		},
 	}
-	var fsys playlistFS = mockFS{}
+	var fsys playlistFS = osFS{}
 	var w bytes.Buffer
 	p := newPlaylist(songs, fsys, &w)
 	checkPlaylistsEqual(t, want, *p)
@@ -522,7 +522,9 @@ func TestPlaylistLoad(t *testing.T) {
 			m3uPath: "NOT_FOUND",
 			p: playlist{
 				tracks: []m3uTrack{{}},
-				fsys:   mockFS{},
+				fsys: osFS{
+					FS: fstest.MapFS{},
+				},
 			},
 			want: playlist{
 				tracks: []m3uTrack{{}},
@@ -538,8 +540,8 @@ func TestPlaylistLoad(t *testing.T) {
 					{path: "d/h.mp3", track: 2},
 				},
 				tracks: []m3uTrack{{}},
-				fsys: mockFS{
-					MapFS: fstest.MapFS{
+				fsys: osFS{
+					FS: fstest.MapFS{
 						"a/b/c.m3u": &fstest.MapFile{
 							Data: []byte(`#EXT3MU
 #EXTINF:0, Track 3 title
@@ -569,8 +571,8 @@ d/h.mp3
 			name:    "all files missing",
 			m3uPath: "a/b/c.m3u",
 			p: playlist{
-				fsys: mockFS{
-					MapFS: fstest.MapFS{
+				fsys: osFS{
+					FS: fstest.MapFS{
 						"a/b/c.m3u": &fstest.MapFile{
 							Data: []byte("x\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\n"),
 						},
@@ -590,8 +592,8 @@ d/h.mp3
 					{path: "j/h.mp3", artist: "art", title: "word", track: 4},
 				},
 				tracks: []m3uTrack{{}},
-				fsys: mockFS{
-					MapFS: fstest.MapFS{
+				fsys: osFS{
+					FS: fstest.MapFS{
 						"a/b/c.m3u": &fstest.MapFile{
 							Data: []byte(`#EXT3MU
 #EXTINF:0, Track 1 title
@@ -669,8 +671,8 @@ func TestPlaylistWrite(t *testing.T) {
 			name:    "file exists",
 			m3uPath: "exists.m3u",
 			p: playlist{
-				fsys: mockFS{
-					MapFS: fstest.MapFS{
+				fsys: osFS{
+					FS: fstest.MapFS{
 						"exists.m3u": &fstest.MapFile{},
 					},
 				},
@@ -678,10 +680,11 @@ func TestPlaylistWrite(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "file exists",
+			name:    "write file error",
 			m3uPath: "new.m3u",
 			p: playlist{
-				fsys: mockFS{
+				fsys: osFS{
+					FS: fstest.MapFS{},
 					writeFileFunc: func(name string, data []byte) error {
 						return fmt.Errorf("mock write error")
 					},
@@ -698,7 +701,8 @@ func TestPlaylistWrite(t *testing.T) {
 					{display: "track 2", song: song{path: "r/b.mp3"}},
 					{display: "Track 1, again :)", song: song{path: "a/b.mp3"}},
 				},
-				fsys: mockFS{
+				fsys: osFS{
+					FS: fstest.MapFS{},
 					writeFileFunc: func(name string, data []byte) error {
 						if want, got := "new.m3u", name; want != got {
 							return fmt.Errorf("names not equal: wanted %q, got %q", want, got)
@@ -817,13 +821,4 @@ func TestDigitCount(t *testing.T) {
 			}
 		})
 	}
-}
-
-type mockFS struct {
-	fstest.MapFS
-	writeFileFunc func(name string, data []byte) error
-}
-
-func (fsys mockFS) WriteFile(name string, data []byte) error {
-	return fsys.writeFileFunc(name, data)
 }

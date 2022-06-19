@@ -15,7 +15,12 @@ import (
 func main() {
 	r := os.Stdin
 	w := os.Stdout
-	fsys := osFS{os.DirFS(".")}
+	fsys := osFS{
+		FS: os.DirFS("."),
+		writeFileFunc: func(name string, data []byte) error {
+			return os.WriteFile(name, data, 0666)
+		},
+	}
 	songs, err := countSeconds(readSongs, fsys, w)
 	switch {
 	case err != nil:
@@ -30,17 +35,27 @@ func main() {
 
 type osFS struct {
 	fs.FS
+	writeFileFunc func(name string, data []byte) error
 }
 
 func (fsys osFS) WriteFile(name string, data []byte) error {
-	return os.WriteFile(name, data, 0666)
+	if !fs.ValidPath(name) {
+		return fmt.Errorf("%q bust be relative to application root", name)
+	}
+	return fsys.writeFileFunc(name, data)
 }
 
 func (fsys osFS) ReadFile(name string) ([]byte, error) {
-	return os.ReadFile(name)
+	if !fs.ValidPath(name) {
+		return nil, fmt.Errorf("%q must be relative to application root", name)
+	}
+	return fs.ReadFile(fsys.FS, name)
 }
 
 func (fsys osFS) Stat(name string) (fs.FileInfo, error) {
+	if !fs.ValidPath(name) {
+		return nil, fmt.Errorf("%q must be relative to application root", name)
+	}
 	return fs.Stat(fsys.FS, name)
 }
 
