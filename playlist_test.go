@@ -719,7 +719,7 @@ func TestPlaylistWrite(t *testing.T) {
 						}
 						f = &MockWriteCloser{
 							closeFunc: func() error {
-								return nil // TODO: test close error
+								return nil
 							},
 						}
 						return f, nil
