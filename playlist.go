@@ -326,11 +326,8 @@ func songLess(s []song) func(i, j int) bool {
 // It is slower but simpler than using log10 with floats, which would use
 // int(math.Log10(float64(i) + 1)))
 func digitCount(i int) int {
-	if i < 0 {
-		return 0
-	}
 	c := 0
-	for i != 0 {
+	for i > 0 {
 		i /= 10
 		c++
 	}
