@@ -87,55 +87,6 @@ func TestOsFSCreateFile(t *testing.T) {
 	}
 }
 
-func TestOsFSReadFile(t *testing.T) {
-	const path = "list.m3u"
-	const want = "hello"
-	tests := []struct {
-		name     string
-		osFS     osFS
-		destPath string
-		wantErr  bool
-	}{
-		{
-			name:     "might note be not child of executablePath",
-			destPath: "/" + path,
-			wantErr:  true,
-		},
-		{
-			name:     "file not found",
-			destPath: path,
-			osFS: osFS{
-				FS: fstest.MapFS{},
-			},
-			wantErr: true,
-		},
-		{
-			name:     "ok",
-			destPath: path,
-			osFS: osFS{
-				FS: fstest.MapFS{
-					path: &fstest.MapFile{Data: []byte(want)},
-				},
-			},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got, err := test.osFS.ReadFile(test.destPath)
-			switch {
-			case test.wantErr:
-				if err == nil {
-					t.Error("wanted error")
-				}
-			case err != nil:
-				t.Errorf("unwanted error: %v", err)
-			case want != string(got):
-				t.Errorf("file data not equal: \n wanted: %q \n got:    %q", want, string(got))
-			}
-		})
-	}
-}
-
 func mockMp3(s song) []byte {
 	data := make([]byte, len(emptyMP3))
 	copy(data, emptyMP3)

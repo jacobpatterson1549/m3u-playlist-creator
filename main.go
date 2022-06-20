@@ -49,13 +49,6 @@ func (fsys osFS) CreateFile(name string) (io.WriteCloser, error) {
 	return fsys.createFileFunc(name)
 }
 
-func (fsys osFS) ReadFile(name string) ([]byte, error) {
-	if !fs.ValidPath(name) {
-		return nil, fmt.Errorf("%q must be relative to application root", name)
-	}
-	return fs.ReadFile(fsys.FS, name)
-}
-
 func readSongs(fsys fs.FS) (songs []song, err error) {
 	// MP3, M4A, M4B, M4P, ALAC, FLAC, OGG, and DSF is supported by github.com/dhowden/tag
 	validSuffixes := []string{".mp3", ".m4a"}
