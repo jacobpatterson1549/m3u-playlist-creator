@@ -214,7 +214,7 @@ func TestRunCommands(t *testing.T) {
 		w := io.Discard
 		var fsys osFS
 		var songs []song
-		runCommands(songs, fsys, r, w)
+		fsys.runPlaylistCreator(songs, r, w)
 	})
 	songs := []song{
 		// songs should be sorted so track 1 is first
@@ -263,7 +263,7 @@ func TestRunCommands(t *testing.T) {
 			return &f, nil
 		},
 	}
-	runCommands(songs, fsys, input, &output)
+	fsys.runPlaylistCreator(songs, input, &output)
 	switch {
 	case output.Len() == 0:
 		t.Errorf("no output written")

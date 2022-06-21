@@ -15,21 +15,33 @@ import (
 func main() {
 	r := os.Stdin
 	w := os.Stdout
-	fsys := osFS{
-		FS: os.DirFS("."),
-		createFileFunc: func(name string) (io.WriteCloser, error) {
-			return os.Create(name)
-		},
+	start := time.Now()
+	t := time.NewTicker(1 * time.Second) // change to Millisecond when testing
+	go func() {
+		for range t.C {
+			fmt.Fprint(w, ".")
+		}
+	}()
+	fs := os.DirFS(".")
+	songs, err := readSongs(fs)
+	t.Stop()
+	if d := time.Since(start).Seconds(); d > 1 {
+		fmt.Fprintf(w, "\n> (loaded in %0.1f seconds)\n", d)
 	}
-	songs, err := countSeconds(readSongs, fsys, w)
 	switch {
 	case err != nil:
 		fmt.Fprintf(w, "Error (reading songs): %v\n", err)
 	case len(songs) == 0:
 		fmt.Fprintf(w, "no songs in folder to add to playlists\n")
 	default:
-		fmt.Fprintf(w, " > loaded %d songs\n", len(songs))
-		runCommands(songs, fsys, r, w)
+		fmt.Fprintf(w, "> loaded %d songs\n", len(songs))
+		fsys := osFS{
+			FS: fs,
+			createFileFunc: func(name string) (io.WriteCloser, error) {
+				return os.Create(name)
+			},
+		}
+		fsys.runPlaylistCreator(songs, r, w)
 	}
 }
 
@@ -49,7 +61,8 @@ func (fsys osFS) CreateFile(name string) (io.WriteCloser, error) {
 	return fsys.createFileFunc(name)
 }
 
-func readSongs(fsys fs.FS) (songs []song, err error) {
+func readSongs(fsys fs.FS) ([]song, error) {
+	var songs []song
 	// MP3, M4A, M4B, M4P, ALAC, FLAC, OGG, and DSF is supported by github.com/dhowden/tag
 	validSuffixes := []string{".mp3", ".m4a"}
 	valid := func(path string) bool {
@@ -91,7 +104,7 @@ func readSongs(fsys fs.FS) (songs []song, err error) {
 	return songs, nil
 }
 
-func runCommands(songs []song, fsys playlistFS, r io.Reader, w io.Writer) {
+func (fsys *osFS) runPlaylistCreator(songs []song, r io.Reader, w io.Writer) {
 	p := newPlaylist(songs, fsys, w)
 	cmds := commands{
 		{"f", p.filter, "Filter songs by the trailing text.  Songs are filtered by artist, album, and title, ignoring case.  Example: `F The Beatles` selects songs by The Beatles."},
@@ -181,33 +194,4 @@ func (cmds commands) run(r io.Reader, w io.Writer) {
 			fmt.Fprintf(w, "Error (invalid command): %v\n", line)
 		}
 	}
-}
-
-func countSeconds(f func(fsys fs.FS) (songs []song, err error), fsys fs.FS, w io.Writer) (songs []song, err error) {
-	t := time.NewTicker(1 * time.Second) // change to Millisecond when testing
-	start := time.Now()
-	var afterFirstTick, afterSecondTick bool
-	go func() {
-		for range t.C {
-			if afterFirstTick {
-				fmt.Fprint(w, ".")
-				if !afterSecondTick {
-					fmt.Fprint(w, ".")
-					afterSecondTick = true
-				}
-			} else {
-				afterFirstTick = true
-			}
-		}
-	}()
-	defer func() {
-		t.Stop()
-		end := time.Now()
-		diff := end.Sub(start)
-		s := int(diff.Seconds())
-		if s > 1 {
-			fmt.Fprintf(w, "  (%d seconds)\n", int(s))
-		}
-	}()
-	return f(fsys)
 }
