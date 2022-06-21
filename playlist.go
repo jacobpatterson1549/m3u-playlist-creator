@@ -247,8 +247,7 @@ func (p *playlist) ReadFrom(r io.Reader) (n int64, err error) {
 	}
 	switch {
 	case s.Err() != nil:
-		err = s.Err()
-		return
+		err = fmt.Errorf("reading playlist file: %v", err)
 	case len(errors) != 0:
 		err = fmt.Errorf("loading playlist songs: %v", strings.Join(errors, "\n"))
 	}

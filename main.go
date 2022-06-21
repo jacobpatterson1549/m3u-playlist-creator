@@ -45,22 +45,6 @@ func main() {
 	}
 }
 
-type osFS struct {
-	fs.FS
-	createFileFunc func(name string) (io.WriteCloser, error)
-}
-
-func (fsys osFS) CreateFile(name string) (io.WriteCloser, error) {
-	if !fs.ValidPath(name) {
-		return nil, fmt.Errorf("%q bust be relative to application root", name)
-	}
-	_, err := fs.Stat(fsys, name)
-	if _, ok := err.(*os.PathError); !ok {
-		return nil, fmt.Errorf("%q already exists or could not be checked: %v", name, err)
-	}
-	return fsys.createFileFunc(name)
-}
-
 func readSongs(fsys fs.FS) ([]song, error) {
 	var songs []song
 	// MP3, M4A, M4B, M4P, ALAC, FLAC, OGG, and DSF is supported by github.com/dhowden/tag
@@ -104,6 +88,22 @@ func readSongs(fsys fs.FS) ([]song, error) {
 	return songs, nil
 }
 
+type osFS struct {
+	fs.FS
+	createFileFunc func(name string) (io.WriteCloser, error)
+}
+
+func (fsys *osFS) CreateFile(name string) (io.WriteCloser, error) {
+	if !fs.ValidPath(name) {
+		return nil, fmt.Errorf("%q bust be relative to application root", name)
+	}
+	_, err := fs.Stat(fsys, name)
+	if _, ok := err.(*os.PathError); !ok {
+		return nil, fmt.Errorf("%q already exists or could not be checked: %v", name, err)
+	}
+	return fsys.createFileFunc(name)
+}
+
 func (fsys *osFS) runPlaylistCreator(songs []song, r io.Reader, w io.Writer) {
 	p := newPlaylist(songs, fsys, w)
 	cmds := commands{
@@ -118,7 +118,7 @@ func (fsys *osFS) runPlaylistCreator(songs []song, r io.Reader, w io.Writer) {
 		{"l", p.load, "Loads the playlist with the specified file name.  The previous playlist is discarded.  Example: `l lists/good.m3u` loads the \"good.m3u\" playlist in the \"lists\" subdirectory."},
 		{"w", p.write, "Writes the playlist to the specified file name.  The file must not exist before the playlist is written to it.  Example: `w lists/new.m3u` save the playlist as \"new.m3u\" in the \"lists\" subdirectory."},
 	}
-	displayHelp(cmds, w)
+	cmds.displayHelp(w)
 	cmds.run(r, w)
 }
 
@@ -131,39 +131,34 @@ type (
 	commands []command
 )
 
-func displayHelp(cmds commands, w io.Writer) {
-	var lines []string
-	lines = append(lines, "Help for m3u-playlist-create", "The program reads commands to create new playlists.")
-	for _, c := range cmds {
-		lines = append(lines, c.key+"    "+c.info)
+func (cmds commands) displayHelp(w io.Writer) {
+	lines := []string{
+		"Help for m3u-playlist-create",
+		"The program reads commands to create new playlists.",
 	}
-	lines = append(lines, "h    Help information is printed.")
-	lines = append(lines, "q    Quits the application.")
+	const tab = "    "
+	for _, c := range cmds {
+		lines = append(lines, c.key+tab+c.info)
+	}
+	lines = append(lines, "h"+tab+"Help information is printed.")
+	lines = append(lines, "q"+tab+"Quits the application.")
 	for _, l := range lines {
 		fmt.Fprintln(w, l)
 	}
 }
 
-func (cmds commands) toLookup(w io.Writer) (map[string]func(s string), error) {
+func (cmds commands) run(r io.Reader, w io.Writer) {
 	cmdsCap := len(cmds) + 2
 	lookup := make(map[string]func(string), cmdsCap)
 	for _, c := range cmds {
 		lookup[c.key] = c.run
 	}
 	lookup["h"] = func(s string) {
-		displayHelp(cmds, w)
+		cmds.displayHelp(w)
 	}
 	lookup["q"] = nil
 	if len(lookup) != cmdsCap {
-		return nil, fmt.Errorf("some commands have duplicate keys: wanted %v, got %v", cmdsCap, len(lookup))
-	}
-	return lookup, nil
-}
-
-func (cmds commands) run(r io.Reader, w io.Writer) {
-	lookup, err := cmds.toLookup(w)
-	if err != nil {
-		fmt.Fprintf(w, "Error (preparing to run commands): %v", err)
+		fmt.Fprintf(w, "Error (preparing to run commands): some commands have duplicate keys: wanted %v, got %v", cmdsCap, len(lookup))
 		return
 	}
 	s := bufio.NewScanner(r)
@@ -182,16 +177,14 @@ func (cmds commands) run(r io.Reader, w io.Writer) {
 		if line == "q" {
 			return
 		}
-		ok = false
 		if commandTokens = strings.Fields(line); len(commandTokens) != 0 {
 			key, args = commandTokens[0], strings.TrimSpace(line[len(commandTokens[0]):])
 			cmd, ok = lookup[key]
 			if ok {
 				cmd(args)
+				continue
 			}
 		}
-		if !ok {
-			fmt.Fprintf(w, "Error (invalid command): %v\n", line)
-		}
+		fmt.Fprintf(w, "Error (invalid command): %v\n", line)
 	}
 }

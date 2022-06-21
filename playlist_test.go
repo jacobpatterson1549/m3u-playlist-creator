@@ -6,6 +6,7 @@ import (
 	"io"
 	"testing"
 	"testing/fstest"
+	"testing/iotest"
 )
 
 func TestNewPlaylist(t *testing.T) {
@@ -19,7 +20,7 @@ func TestNewPlaylist(t *testing.T) {
 			{artist: "b", album: "c", title: "d"},
 		},
 	}
-	var fsys playlistFS = osFS{}
+	var fsys MockPlaylistFS
 	var w bytes.Buffer
 	p := newPlaylist(songs, fsys, &w)
 	checkPlaylistsEqual(t, want, *p)
@@ -523,7 +524,7 @@ func TestPlaylistLoad(t *testing.T) {
 			m3uPath: "NOT_FOUND",
 			p: playlist{
 				tracks: []m3uTrack{{}},
-				fsys: osFS{
+				fsys: MockPlaylistFS{
 					FS: fstest.MapFS{},
 				},
 			},
@@ -541,7 +542,7 @@ func TestPlaylistLoad(t *testing.T) {
 					{path: "d/h.mp3", track: 2},
 				},
 				tracks: []m3uTrack{{}},
-				fsys: osFS{
+				fsys: MockPlaylistFS{
 					FS: fstest.MapFS{
 						"a/b/c.m3u": &fstest.MapFile{
 							Data: []byte(`#EXT3MU
@@ -572,7 +573,7 @@ d/h.mp3
 			name:    "all files missing",
 			m3uPath: "a/b/c.m3u",
 			p: playlist{
-				fsys: osFS{
+				fsys: MockPlaylistFS{
 					FS: fstest.MapFS{
 						"a/b/c.m3u": &fstest.MapFile{
 							Data: []byte("x\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\n"),
@@ -593,7 +594,7 @@ d/h.mp3
 					{path: "j/h.mp3", artist: "art", title: "word", track: 4},
 				},
 				tracks: []m3uTrack{{}},
-				fsys: osFS{
+				fsys: MockPlaylistFS{
 					FS: fstest.MapFS{
 						"a/b/c.m3u": &fstest.MapFile{
 							Data: []byte(`#EXT3MU
@@ -636,7 +637,63 @@ j/h.mp3
 	}
 }
 
+func TestPlaylistReadFrom(t *testing.T) {
+	t.Run("read error", func(t *testing.T) {
+		r := iotest.ErrReader(fmt.Errorf("mock read playlist file error"))
+		p := playlist{
+			tracks: []m3uTrack{{}},
+		}
+		n, err := p.ReadFrom(r)
+		switch {
+		case n != 0:
+			t.Errorf("wanted no bytes to be read, got %v", n)
+		case err == nil:
+			t.Errorf("wanted error")
+		case len(p.tracks) != 0:
+			t.Errorf("wanted tracks to be set from broken read, even if an error occurs")
+		}
+	})
+	t.Run("byte counts", func(t *testing.T) {
+		invalidFile := "here\nare\r\nsome invalid lines"
+		var wantN int64 = 4 + 3 + (4 + 1 + 7 + 1 + 5) // character counts of each line
+		r := bytes.NewReader([]byte(invalidFile))
+		p := playlist{
+			tracks: []m3uTrack{{}},
+		}
+		n, err := p.ReadFrom(r)
+		switch {
+		case n != wantN:
+			t.Errorf("read byte counts not equal: wanted %v, got %v", wantN, n)
+		case err == nil:
+			t.Errorf("wanted error")
+		case len(p.tracks) != 0:
+			t.Errorf("wanted tracks to be set from broken read, even if an error occurs")
+		}
+	})
+}
+
 func TestPlaylistWrite(t *testing.T) {
+	t.Run("write track error", func(t *testing.T) {
+		var buf bytes.Buffer
+		p := playlist{
+			fsys: MockPlaylistFS{
+				FS: fstest.MapFS{},
+				CreateFileFunc: func(name string) (io.WriteCloser, error) {
+					return &MockWriteCloser{
+						Writer: &MockFixedBuffer{},
+						CloseFunc: func() error {
+							return nil
+						},
+					}, nil
+				},
+			},
+			w: &buf,
+		}
+		p.write("list.m3u")
+		if buf.Len() == 0 {
+			t.Error("wanted error writing empty playlist header to empty buffer that goes not grow")
+		}
+	})
 	var f io.WriteCloser
 	tests := []struct {
 		name    string
@@ -660,12 +717,11 @@ func TestPlaylistWrite(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "file exists",
-			m3uPath: "exists.m3u",
+			name: "file exists",
 			p: playlist{
-				fsys: osFS{
-					FS: fstest.MapFS{
-						"exists.m3u": &fstest.MapFile{},
+				fsys: MockPlaylistFS{
+					CreateFileFunc: func(name string) (io.WriteCloser, error) {
+						return nil, fmt.Errorf("file exists")
 					},
 				},
 			},
@@ -675,9 +731,9 @@ func TestPlaylistWrite(t *testing.T) {
 			name:    "write file error",
 			m3uPath: "new.m3u",
 			p: playlist{
-				fsys: osFS{
+				fsys: MockPlaylistFS{
 					FS: fstest.MapFS{},
-					createFileFunc: func(name string) (io.WriteCloser, error) {
+					CreateFileFunc: func(name string) (io.WriteCloser, error) {
 						return nil, fmt.Errorf("create write error")
 					},
 				},
@@ -688,11 +744,12 @@ func TestPlaylistWrite(t *testing.T) {
 			name:    "close file error",
 			m3uPath: "new.m3u",
 			p: playlist{
-				fsys: osFS{
+				fsys: MockPlaylistFS{
 					FS: fstest.MapFS{},
-					createFileFunc: func(name string) (io.WriteCloser, error) {
+					CreateFileFunc: func(name string) (io.WriteCloser, error) {
 						f = &MockWriteCloser{
-							closeFunc: func() error {
+							Writer: io.Discard,
+							CloseFunc: func() error {
 								return fmt.Errorf("close error")
 							},
 						}
@@ -711,14 +768,15 @@ func TestPlaylistWrite(t *testing.T) {
 					{display: "track 2", song: song{path: "r/b.mp3"}},
 					{display: "Track 1, again :)", song: song{path: "a/b.mp3"}},
 				},
-				fsys: osFS{
+				fsys: MockPlaylistFS{
 					FS: fstest.MapFS{},
-					createFileFunc: func(name string) (io.WriteCloser, error) {
+					CreateFileFunc: func(name string) (io.WriteCloser, error) {
 						if want, got := "new.m3u", name; want != got {
 							return nil, fmt.Errorf("names not equal: wanted %q, got %q", want, got)
 						}
 						f = &MockWriteCloser{
-							closeFunc: func() error {
+							Writer: &bytes.Buffer{},
+							CloseFunc: func() error {
 								return nil
 							},
 						}
@@ -737,7 +795,6 @@ func TestPlaylistWrite(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			f = new(MockWriteCloser)
 			var w bytes.Buffer
 			test.p.w = &w
 			test.p.write(test.m3uPath)
@@ -749,44 +806,13 @@ func TestPlaylistWrite(t *testing.T) {
 				}
 			case gotErr:
 				t.Errorf("unwanted error: %v", w.String())
-			case test.want != f.(*MockWriteCloser).String():
-				t.Errorf("file populated as desired: \n wanted: %q \n got:    %q", test.want, f.(*MockWriteCloser).String())
+			default:
+				if want, got := test.want, f.(*MockWriteCloser).Writer.(*bytes.Buffer).String(); want != got {
+					t.Errorf("file populated as desired: \n wanted: %q \n got:    %q", want, got)
+				}
 			}
 		})
 	}
-}
-
-func checkPlaylistsEqual(t *testing.T, want, got playlist) {
-	t.Helper()
-	if !playlistsEqual(want, got) {
-		t.Errorf("playlists not equal: \n wanted: %v \n got:    %v", want, got)
-	}
-}
-
-func playlistsEqual(a, b playlist) bool {
-	switch {
-	case len(a.songs) != len(b.songs),
-		len(a.selection) != len(b.selection),
-		len(a.tracks) != len(b.tracks):
-		return false
-	}
-	for i := range a.songs {
-		if a.songs[i] != b.songs[i] {
-			return false
-		}
-	}
-	for i := range a.selection {
-		if a.selection[i] != b.selection[i] {
-			return false
-		}
-	}
-	for i := range a.tracks {
-		if a.tracks[i] != b.tracks[i] {
-			return false
-		}
-	}
-	// do not compare w, fsys
-	return true
 }
 
 func TestSongLess(t *testing.T) {
