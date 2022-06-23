@@ -175,14 +175,14 @@ func (p *playlist) printTracks(_ string) {
 		return maxW
 	}
 	maxIDWidth := digitCount(len(p.tracks))
-	if maxIDWidth < 2 {
-		maxIDWidth = 2
+	if maxIDWidth < 5 {
+		maxIDWidth = 5
 	}
 	maxDisplayWidth := maxWidth(7, func(t m3uTrack) int { return len(t.display) })
 	maxArtistWidth := maxWidth(6, func(t m3uTrack) int { return len(t.artist) })
 	maxAlbumWidth := maxWidth(5, func(t m3uTrack) int { return len(t.album) })
 	format := fmt.Sprintf("%%%dv    %%-%dv    %%-%dv    %%-%dv    %%v\n", maxIDWidth, maxDisplayWidth, maxArtistWidth, maxAlbumWidth)
-	fmt.Fprintf(p.w, format, "ID", "Display", "Artist", "Album", "Title")
+	fmt.Fprintf(p.w, format, "Index", "Display", "Artist", "Album", "Title")
 	for i, t := range p.tracks {
 		fmt.Fprintf(p.w, format, i+1, t.display, t.artist, t.album, t.title)
 	}

@@ -107,16 +107,16 @@ func (fsys *osFS) CreateFile(name string) (io.WriteCloser, error) {
 func (fsys *osFS) runPlaylistCreator(songs []song, r io.Reader, w io.Writer) {
 	p := newPlaylist(songs, fsys, w)
 	cmds := commands{
-		{"f", p.filter, "Filter songs by the trailing text.  Songs are filtered by artist, album, and title, ignoring case.  Example: `F The Beatles` selects songs by The Beatles."},
-		{"d", p.printSongFilter, "Displays the filtered songs."},
-		{"a", p.addTrack, "Add song to the playlist by filter id.  The song id must be from the previous filter.  Example: `a 5` adds the fifth song from the last filter to the playlist."},
-		{"m", p.moveTrack, "Moves song in playlist to other index.  Example: `m 3 1` moves the third song to be first in the playlist."},
-		{"r", p.removeTrack, "Removes song at the index from the playlist.  Example: `r 4` removes the fourth song from the playlist."},
-		{"n", p.renameTrack, "Renames the song in the playlist by id.  Example: `n 2 Best Ever` Renames the display name of the second song in the playlist to \"Best Ever\"."},
-		{"c", p.clearTracks, "Clears all songs in the playlist."},
-		{"p", p.printTracks, "Prints all songs in the playlist."},
-		{"l", p.load, "Loads the playlist with the specified file name.  The previous playlist is discarded.  Example: `l lists/good.m3u` loads the \"good.m3u\" playlist in the \"lists\" subdirectory."},
-		{"w", p.write, "Writes the playlist to the specified file name.  The file must not exist before the playlist is written to it.  Example: `w lists/new.m3u` save the playlist as \"new.m3u\" in the \"lists\" subdirectory."},
+		{"f", p.filter, "Filter songs with query: f <query>"},
+		{"d", p.printSongFilter, "Display filter'd songs by id"},
+		{"a", p.addTrack, "Add song song by filter id: a <id>"},
+		{"m", p.moveTrack, "Move playlist track: m <old_index> <new_index>"},
+		{"r", p.removeTrack, "Remove playlist track: r <index>"},
+		{"n", p.renameTrack, "Rename playlist track: n <index> <name>"},
+		{"c", p.clearTracks, "Clear playlist tracks"},
+		{"p", p.printTracks, "Print playlist tracks and indexes"},
+		{"l", p.load, "Loads playlist: l <filename>"},
+		{"w", p.write, "Writes playlist: w <filename>"},
 	}
 	cmds.displayHelp(w)
 	cmds.run(r, w)
@@ -134,7 +134,10 @@ type (
 func (cmds commands) displayHelp(w io.Writer) {
 	lines := []string{
 		"Help for m3u-playlist-create",
-		"The program reads commands to create new playlists.",
+		"The application reads commands to create m3u playlists.",
+		"First, songs must be selected by a filter.",
+		"Then, songs can be added to playlist by filter id.",
+		"Playlists tracks are referenced by their index.",
 	}
 	const tab = "    "
 	for _, c := range cmds {

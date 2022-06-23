@@ -473,8 +473,8 @@ func TestPlaylistPrintTracks(t *testing.T) {
 					{song: song{artist: "x", album: "y", track: 8, title: "z", path: "b"}, display: "a"},
 				},
 			},
-			want: `ID    Display    Artist    Album    Title
- 1    a          x         y        z
+			want: `Index    Display    Artist    Album    Title
+    1    a          x         y        z
 `,
 		},
 		{
@@ -484,8 +484,8 @@ func TestPlaylistPrintTracks(t *testing.T) {
 					{song: song{artist: "David Bowie", album: "The Rise and Fall of Ziggy Stardust and the Spiders from Mars", track: 1, title: "Five Years"}, display: "long-title"},
 				},
 			},
-			want: `ID    Display       Artist         Album                                                            Title
- 1    long-title    David Bowie    The Rise and Fall of Ziggy Stardust and the Spiders from Mars    Five Years
+			want: `Index    Display       Artist         Album                                                            Title
+    1    long-title    David Bowie    The Rise and Fall of Ziggy Stardust and the Spiders from Mars    Five Years
 `,
 		},
 	}
