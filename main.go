@@ -8,8 +8,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"github.com/dhowden/tag"
 )
 
 func main() {
@@ -23,7 +21,12 @@ func main() {
 		}
 	}()
 	fs := os.DirFS(".")
-	songs, err := readSongs(fs)
+	sr := songReader{
+		fsys:         fs,
+		pathSuffixes: []string{".mp3", ".m4a"},
+		// MP3, M4A, M4B, M4P, ALAC, FLAC, OGG, and DSF is supported by github.com/dhowden/tag
+	}
+	songs, err := sr.readSongs()
 	t.Stop()
 	if d := time.Since(start).Seconds(); d > 1 {
 		fmt.Fprintf(w, "\n> (loaded in %0.1f seconds)\n", d)
@@ -43,49 +46,6 @@ func main() {
 		}
 		fsys.runPlaylistCreator(songs, r, w)
 	}
-}
-
-func readSongs(fsys fs.FS) ([]song, error) {
-	var songs []song
-	// MP3, M4A, M4B, M4P, ALAC, FLAC, OGG, and DSF is supported by github.com/dhowden/tag
-	validSuffixes := []string{".mp3", ".m4a"}
-	valid := func(path string) bool {
-		for _, suffix := range validSuffixes {
-			if strings.HasSuffix(path, suffix) {
-				return true
-			}
-		}
-		return false
-	}
-	walkDir := func(path string, d fs.DirEntry, err error) error {
-		switch {
-		case err != nil, d.IsDir(), !valid(path):
-			return nil
-		}
-		f, err := fsys.Open(path)
-		if err != nil {
-			return fmt.Errorf("reading %v: %v", path, err)
-		}
-		defer f.Close()
-		m, err := tag.ReadFrom(f.(io.ReadSeeker))
-		if err != nil {
-			return fmt.Errorf("parsing tags for %v: %v", path, err)
-		}
-		track, _ := m.Track()
-		s := song{
-			path:   path,
-			album:  m.Album(),
-			artist: m.Artist(),
-			title:  m.Title(),
-			track:  track,
-		}
-		songs = append(songs, s)
-		return nil
-	}
-	if err := fs.WalkDir(fsys, ".", walkDir); err != nil {
-		return nil, fmt.Errorf("walking directory: %v", err)
-	}
-	return songs, nil
 }
 
 type osFS struct {

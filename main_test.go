@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/fs"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -70,107 +69,6 @@ func TestOsFSCreateFile(t *testing.T) {
 				t.Errorf("unwanted error: %v", err)
 			case w == nil:
 				t.Error("file not created")
-			}
-		})
-	}
-}
-
-func TestReadSongs(t *testing.T) {
-	tests := []struct {
-		name    string
-		fsys    fs.FS
-		want    []song
-		wantErr bool
-	}{
-		{
-			name: "0 files => 0 songs, ok",
-			fsys: fstest.MapFS{},
-		},
-		{
-			name: "ok",
-			fsys: fstest.MapFS{
-				"a.mp3": &fstest.MapFile{
-					Data: emptyMP3,
-				},
-				"b/c/d.mp3": &fstest.MapFile{
-					Data: mockMp3(song{
-						track: 2,
-						// these will get padded with spaces
-						artist: "Beck",
-						album:  "Guero",
-						title:  "E-Pro",
-					}),
-				},
-				"b/c/e.mp3": &fstest.MapFile{
-					Data: mockMp3(song{
-						track: 1,
-						/// these will get truncated to 10 characters
-						artist: "Eagles Of Death Metal",
-						album:  "Peace Love Death Metal",
-						title:  "I Only Want You",
-					}),
-				},
-				"b/c/notes.txt": &fstest.MapFile{
-					Data: []byte("do not read this file"),
-				},
-			},
-			want: []song{
-				{
-					path:   "a.mp3",
-					artist: emptyMp3Artist,
-					album:  emptyMp3Album,
-					title:  emptyMp3Title,
-					track:  1549,
-				},
-				{
-					path:   "b/c/d.mp3",
-					artist: "Beck      ",
-					album:  "Guero     ",
-					title:  "E-Pro     ",
-					track:  2,
-				},
-				{
-					path:   "b/c/e.mp3",
-					artist: "Eagles Of ",
-					album:  "Peace Love",
-					title:  "I Only Wan",
-					track:  1,
-				},
-			},
-		},
-		{
-			name: "bad first song",
-			fsys: fstest.MapFS{
-				"bad.mp3": &fstest.MapFile{
-					Data: []byte("UNKNOWN"),
-				},
-				"c.mp3": &fstest.MapFile{
-					Data: emptyMP3,
-				},
-			},
-			wantErr: true,
-		},
-	}
-	songsEqual := func(a, b []song) bool {
-		if len(a) != len(b) {
-			return false
-		}
-		for i := range a {
-			if a[i] != b[i] {
-				return false
-			}
-		}
-		return true
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got, err := readSongs(test.fsys)
-			gotErr := err != nil
-			switch {
-			case test.wantErr != gotErr:
-				t.Errorf("wanted error: %v, got: %v", test.wantErr, err)
-			case !songsEqual(test.want, got):
-				t.Errorf("songs not equal: \n wanted: %v \n got:    %v", test.want, got)
 			}
 		})
 	}
