@@ -71,19 +71,20 @@ func (p *playlist) printSongFilter(_ string) {
 	format := fmt.Sprintf("%%%dv    %%-%dv    %%-%dv    %%v\n", maxIDWidth, maxArtistWidth, maxAlbumWidth)
 	fmt.Fprintf(p.w, format, "ID", "Artist", "Album", "Title")
 	for i, s := range p.selection {
-		fmt.Fprintf(p.w, format, i+1, s.artist, s.album, s.title)
+		id := i + 1
+		fmt.Fprintf(p.w, format, id, s.artist, s.album, s.title)
 	}
 }
 
 // addTrack adds a song from the last filter to the playlist by id
-func (p *playlist) addTrack(selectionID string) {
+func (p *playlist) addTrack(filterID string) {
 	if len(p.selection) == 0 {
 		fmt.Fprintf(p.w, "Error (add track): no selection\n")
 		return
 	}
-	id, err := strconv.Atoi(selectionID)
+	id, err := strconv.Atoi(filterID)
 	if err != nil || id <= 0 || id > len(p.selection) {
-		fmt.Fprintf(p.w, "Error (add track): reading song id %q from selection. Must be in (1-%v): %v\n", selectionID, len(p.selection), err)
+		fmt.Fprintf(p.w, "Error (add track): reading song id %q from selection. Must be in (1-%v): %v\n", filterID, len(p.selection), err)
 		return
 	}
 	s := p.selection[id-1]
@@ -95,14 +96,14 @@ func (p *playlist) addTrack(selectionID string) {
 }
 
 // removeTrack removes a song from the playlist by id
-func (p *playlist) removeTrack(trackID string) {
+func (p *playlist) removeTrack(idx string) {
 	if len(p.tracks) == 0 {
 		fmt.Fprintf(p.w, "Error (remove track): no selection\n")
 		return
 	}
-	id, err := strconv.Atoi(trackID)
+	id, err := strconv.Atoi(idx)
 	if err != nil || id <= 0 || id > len(p.tracks) {
-		fmt.Fprintf(p.w, "Error (remove track): reading track id %q from playlist. Must be in (1-%v): %v\n", trackID, len(p.tracks), err)
+		fmt.Fprintf(p.w, "Error (remove track): reading track index %q from playlist. Must be in (1-%v): %v\n", idx, len(p.tracks), err)
 		return
 	}
 	id-- // make 1-indexed
@@ -117,30 +118,30 @@ func (p *playlist) moveTrack(command string) {
 		fmt.Fprintf(p.w, "Error (move track): wanted track id and move index\n")
 		return
 	}
-	trackID, moveIndex := f[0], f[1]
-	id, err := strconv.Atoi(trackID)
+	trackIdx, moveIndex := f[0], f[1]
+	id, err := strconv.Atoi(trackIdx)
 	if err != nil || id <= 0 || id > len(p.tracks) {
-		fmt.Fprintf(p.w, "Error (move track): reading track id %q from playlist. Must be in (1-%v): %v\n", trackID, len(p.tracks), err)
+		fmt.Fprintf(p.w, "Error (move track): reading track index %q from playlist. Must be in (1-%v): %v\n", trackIdx, len(p.tracks), err)
 		return
 	}
 	id-- // make 1-indexed
-	idx, err := strconv.Atoi(moveIndex)
-	if err != nil || idx <= 0 || idx > len(p.tracks) {
-		fmt.Fprintf(p.w, "Error (move track): reading track id %q from playlist. Must be in at least 1: %v\n", idx, err)
+	destIdx, err := strconv.Atoi(moveIndex)
+	if err != nil || destIdx <= 0 || destIdx > len(p.tracks) {
+		fmt.Fprintf(p.w, "Error (move track): reading track destination index %q from playlist. Must be in (1-%v): %v\n", destIdx, len(p.tracks), err)
 		return
 	}
-	idx-- // make 1-indexed
+	destIdx-- // make 1-indexed
 	switch {
-	case id == idx:
+	case id == destIdx:
 		// NOOP
-	case idx < id: // move to index, shifting others right
+	case destIdx < id: // move to index, shifting others right
 		t := p.tracks[id]
-		copy(p.tracks[idx+1:], p.tracks[idx:id])
-		p.tracks[idx] = t
-	case id < idx: // move to index, shifting others left
+		copy(p.tracks[destIdx+1:], p.tracks[destIdx:id])
+		p.tracks[destIdx] = t
+	case id < destIdx: // move to index, shifting others left
 		t := p.tracks[id]
-		copy(p.tracks[id:], p.tracks[id+1:idx+1])
-		p.tracks[idx] = t
+		copy(p.tracks[id:], p.tracks[id+1:destIdx+1])
+		p.tracks[destIdx] = t
 	}
 }
 
@@ -151,10 +152,10 @@ func (p *playlist) renameTrack(command string) {
 		fmt.Fprintf(p.w, "Error (rename track): wanted track id and move index\n")
 		return
 	}
-	trackID := f[0]
-	id, err := strconv.Atoi(trackID)
+	trackIdx := f[0]
+	id, err := strconv.Atoi(trackIdx)
 	if err != nil || id <= 0 || id > len(p.tracks) {
-		fmt.Fprintf(p.w, "Error (rename track): reading track id %q from playlist. Must be in (1-%v): %v\n", trackID, len(p.tracks), err)
+		fmt.Fprintf(p.w, "Error (rename track): reading track id %q from playlist. Must be in (1-%v): %v\n", trackIdx, len(p.tracks), err)
 		return
 	}
 	id-- // make 1-indexed
@@ -184,7 +185,8 @@ func (p *playlist) printTracks(_ string) {
 	format := fmt.Sprintf("%%%dv    %%-%dv    %%-%dv    %%-%dv    %%v\n", maxIDWidth, maxDisplayWidth, maxArtistWidth, maxAlbumWidth)
 	fmt.Fprintf(p.w, format, "Index", "Display", "Artist", "Album", "Title")
 	for i, t := range p.tracks {
-		fmt.Fprintf(p.w, format, i+1, t.display, t.artist, t.album, t.title)
+		idx := i + 1
+		fmt.Fprintf(p.w, format, idx, t.display, t.artist, t.album, t.title)
 	}
 }
 
