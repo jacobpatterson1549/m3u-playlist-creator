@@ -36,3 +36,10 @@ Move it to the playlist root directory for use.
 Build a Windows version of the application with `GOOS=windows GOARCH=amd64 go build -o build/m3u-playlist-creator.exe`
 
 Run tests with `go test --cover`
+
+### Running
+
+Songs are loaded from the directory the application is run from.
+
+If the app is launched with the -md5 parameter, md5sums are computed for each song.
+They are displayed and can be filtered on, but cause the app to load much more slowly.

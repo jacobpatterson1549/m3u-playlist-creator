@@ -21,6 +21,7 @@ type playlist struct {
 	tracks    []m3uTrack
 	fsys      playlistFS
 	w         io.Writer
+	showHash  bool
 }
 
 type m3uTrack struct {
@@ -28,12 +29,13 @@ type m3uTrack struct {
 	display string
 }
 
-func newPlaylist(songs []song, fsys playlistFS, w io.Writer) *playlist {
+func newPlaylist(songs []song, fsys playlistFS, w io.Writer, showHash bool) *playlist {
 	p := playlist{
 		songs:     make([]song, len(songs)),
 		selection: make([]song, 0, len(songs)),
 		fsys:      fsys,
 		w:         w,
+		showHash:  showHash,
 	}
 	copy(p.songs, songs)
 	sort.Slice(p.songs, songLess(p.songs))
@@ -44,7 +46,7 @@ func newPlaylist(songs []song, fsys playlistFS, w io.Writer) *playlist {
 func (p *playlist) filter(command string) {
 	p.selection = p.selection[:0]
 	for _, s := range p.songs {
-		if s.matches(command) {
+		if s.matches(command, p.showHash) {
 			p.selection = append(p.selection, s)
 		}
 	}
@@ -68,9 +70,16 @@ func (p *playlist) printSongFilter(_ string) {
 	}
 	maxArtistWidth := maxWidth(6, func(s song) int { return len(s.artist) })
 	maxAlbumWidth := maxWidth(5, func(s song) int { return len(s.album) })
+	hashFormat := "%32v    "
 	format := fmt.Sprintf("%%%dv    %%-%dv    %%-%dv    %%v\n", maxIDWidth, maxArtistWidth, maxAlbumWidth)
+	if p.showHash {
+		fmt.Fprintf(p.w, hashFormat, "Hash")
+	}
 	fmt.Fprintf(p.w, format, "ID", "Artist", "Album", "Title")
 	for i, s := range p.selection {
+		if p.showHash {
+			fmt.Fprintf(p.w, hashFormat, s.hash)
+		}
 		id := i + 1
 		fmt.Fprintf(p.w, format, id, s.artist, s.album, s.title)
 	}
@@ -182,9 +191,16 @@ func (p *playlist) printTracks(_ string) {
 	maxDisplayWidth := maxWidth(7, func(t m3uTrack) int { return len(t.display) })
 	maxArtistWidth := maxWidth(6, func(t m3uTrack) int { return len(t.artist) })
 	maxAlbumWidth := maxWidth(5, func(t m3uTrack) int { return len(t.album) })
+	hashFormat := "%32v    "
 	format := fmt.Sprintf("%%%dv    %%-%dv    %%-%dv    %%-%dv    %%v\n", maxIDWidth, maxDisplayWidth, maxArtistWidth, maxAlbumWidth)
+	if p.showHash {
+		fmt.Fprintf(p.w, hashFormat, "Hash")
+	}
 	fmt.Fprintf(p.w, format, "Index", "Display", "Artist", "Album", "Title")
 	for i, t := range p.tracks {
+		if p.showHash {
+			fmt.Fprintf(p.w, hashFormat, t.hash)
+		}
 		idx := i + 1
 		fmt.Fprintf(p.w, format, idx, t.display, t.artist, t.album, t.title)
 	}

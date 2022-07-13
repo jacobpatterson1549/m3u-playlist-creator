@@ -22,7 +22,7 @@ func TestNewPlaylist(t *testing.T) {
 	}
 	var fsys MockPlaylistFS
 	var w bytes.Buffer
-	p := newPlaylist(songs, fsys, &w)
+	p := newPlaylist(songs, fsys, &w, false)
 	checkPlaylistsEqual(t, want, *p)
 	if want, got := len(songs), cap(p.selection); want != got {
 		t.Errorf("selection not allocated: wanted %v, got %v", want, got)
@@ -143,6 +143,18 @@ func TestPlaylistPrintFilter(t *testing.T) {
 10    The Killers    Hot Fuss    Believe Me Natalie
 11    The Killers    Hot Fuss    Midnight Show
 12    The Killers    Hot Fuss    Everything Will Be Alright
+`,
+		},
+		{
+			name: "with 16 byte hash",
+			p: playlist{
+				showHash: true,
+				selection: []song{
+					{artist: "x", album: "y", track: 8, title: "z", hash: "tiny"},
+				},
+			},
+			want: `                            Hash    ID    Artist    Album    Title
+                            tiny     1    x         y        z
 `,
 		},
 	}
@@ -488,6 +500,18 @@ func TestPlaylistPrintTracks(t *testing.T) {
     1    long-title    David Bowie    The Rise and Fall of Ziggy Stardust and the Spiders from Mars    Five Years
 `,
 		},
+		{
+			name: "short track with hash",
+			p: playlist{
+				showHash: true,
+				tracks: []m3uTrack{
+					{song: song{artist: "x", album: "y", track: 8, title: "z", path: "b", hash: "tiny"}, display: "a"},
+				},
+			},
+			want: `                            Hash    Index    Display    Artist    Album    Title
+                            tiny        1    a          x         y        z
+`,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -496,6 +520,9 @@ func TestPlaylistPrintTracks(t *testing.T) {
 			test.p.printTracks("")
 			if want, got := test.want, w.String(); want != got {
 				t.Errorf("printed playlist/tracks not equal: \n wanted: %q \n got:    %q", want, got)
+				t.Errorf("bytes are: ")
+				t.Errorf("%v", []byte(want))
+				t.Errorf("%v", []byte(got))
 			}
 		})
 	}
@@ -819,11 +846,11 @@ func TestSongLess(t *testing.T) {
 	songs := []song{
 		0: {},
 		1: {},
-		2: {"pathB", "artist1", "album1", "title1", 1},
-		3: {"pathA", "artist0", "album2", "title2", 1},
-		4: {"pathA", "artist0", "album3", "title2", 3},
-		5: {"pathA", "artist0", "album3", "title1", 5},
-		6: {"pathA", "artist0", "album3", "title0", 5},
+		2: {path: "pathB", artist: "artist1", album: "album1", title: "title1", track: 1},
+		3: {path: "pathA", artist: "artist0", album: "album2", title: "title2", track: 1},
+		4: {path: "pathA", artist: "artist0", album: "album3", title: "title2", track: 3},
+		5: {path: "pathA", artist: "artist0", album: "album3", title: "title1", track: 5},
+		6: {path: "pathA", artist: "artist0", album: "album3", title: "title0", track: 5},
 	}
 	tests := []struct {
 		name string

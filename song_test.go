@@ -18,7 +18,24 @@ func TestSongMatches(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if test.want != test.song.matches(test.filter) {
+			if test.want != test.song.matches(test.filter, false) {
+				t.Error()
+			}
+		})
+	}
+	hashTests := []struct {
+		name      string
+		checkHash bool
+		want      bool
+	}{
+		{"no check", false, false},
+		{"yes check", true, true},
+	}
+	for _, test := range hashTests {
+		t.Run(test.name, func(t *testing.T) {
+			filter := "hash"
+			s := song{hash: filter}
+			if test.want != s.matches(filter, test.checkHash) {
 				t.Error()
 			}
 		})

@@ -4,15 +4,17 @@ import "strings"
 
 type song struct {
 	path                 string
+	hash                 string
 	artist, album, title string
 	track                int
 }
 
-func (s song) matches(filter string) bool {
+func (s song) matches(filter string, checkHash bool) bool {
 	filter = strings.ToLower(filter)
 	return strings.Contains(strings.ToLower(s.artist), filter) ||
 		strings.Contains(strings.ToLower(s.album), filter) ||
-		strings.Contains(strings.ToLower(s.title), filter)
+		strings.Contains(strings.ToLower(s.title), filter) ||
+		(checkHash && strings.Contains(s.hash, filter))
 }
 
 func (s song) display() string {

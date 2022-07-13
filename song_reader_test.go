@@ -1,16 +1,17 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"testing/fstest"
 )
 
 func TestSongReaderValidPath(t *testing.T) {
 	tests := []struct {
-		name          string
+		name         string
 		pathSuffixes []string
-		path          string
-		want          bool
+		path         string
+		want         bool
 	}{
 		{"empty songReader", nil, "song.mp3", false},
 		{"empty paths matches nothing 1", nil, "", false},
@@ -38,6 +39,7 @@ func TestSongReaderReadSongs(t *testing.T) {
 		sr      songReader
 		want    []song
 		wantErr bool
+		wantLog bool
 	}{
 		{
 			name: "0 files => 0 songs, ok",
@@ -101,7 +103,7 @@ func TestSongReaderReadSongs(t *testing.T) {
 			},
 		},
 		{
-			name: "bad first song",
+			name: "bad first song (should be skipped)",
 			sr: songReader{
 				pathSuffixes: []string{".mp3"},
 				fsys: fstest.MapFS{
@@ -113,7 +115,38 @@ func TestSongReaderReadSongs(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			want: []song{
+				{
+					path:   "c.mp3",
+					artist: emptyMp3Artist,
+					album:  emptyMp3Album,
+					title:  emptyMp3Title,
+					track:  1549,
+				},
+			},
+			wantLog: true,
+		},
+		{
+			name: "showHash",
+			sr: songReader{
+				pathSuffixes: []string{".mp3"},
+				addHash:      true,
+				fsys: fstest.MapFS{
+					"c.mp3": &fstest.MapFile{
+						Data: emptyMP3,
+					},
+				},
+			},
+			want: []song{
+				{
+					path:   "c.mp3",
+					artist: emptyMp3Artist,
+					album:  emptyMp3Album,
+					title:  emptyMp3Title,
+					track:  1549,
+					hash:   "6f55483b1675c73e08d89b529ba25a65",
+				},
+			},
 		},
 	}
 	songsEqual := func(a, b []song) bool {
@@ -129,13 +162,17 @@ func TestSongReaderReadSongs(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := test.sr.readSongs()
+			var w strings.Builder
+			got, err := test.sr.readSongs(&w)
+			gotLog := w.Len() != 0
 			gotErr := err != nil
 			switch {
 			case test.wantErr != gotErr:
 				t.Errorf("wanted error: %v, got: %v", test.wantErr, err)
 			case !songsEqual(test.want, got):
 				t.Errorf("songs not equal: \n wanted: %v \n got:    %v", test.want, got)
+			case test.wantLog != gotLog:
+				t.Errorf("wanted log: %v, got %q", test.wantLog, w.String())
 			}
 		})
 	}

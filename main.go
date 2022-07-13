@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -13,6 +14,9 @@ import (
 func main() {
 	r := os.Stdin
 	w := os.Stdout
+	var showHash bool
+	flag.BoolVar(&showHash, "md5", false, "load md5sums for songs")
+	flag.Parse()
 	start := time.Now()
 	t := time.NewTicker(1 * time.Second) // change to Millisecond when testing
 	go func() {
@@ -23,10 +27,11 @@ func main() {
 	fs := os.DirFS(".")
 	sr := songReader{
 		fsys:         fs,
+		addHash:      showHash,
 		pathSuffixes: []string{".mp3", ".m4a"},
 		// MP3, M4A, M4B, M4P, ALAC, FLAC, OGG, and DSF is supported by github.com/dhowden/tag
 	}
-	songs, err := sr.readSongs()
+	songs, err := sr.readSongs(w)
 	t.Stop()
 	if d := time.Since(start).Seconds(); d > 1 {
 		fmt.Fprintf(w, "\n> (loaded in %0.1f seconds)\n", d)
@@ -44,7 +49,7 @@ func main() {
 				return os.Create(name)
 			},
 		}
-		fsys.runPlaylistCreator(songs, r, w)
+		fsys.runPlaylistCreator(songs, r, w, showHash)
 	}
 }
 
@@ -64,8 +69,8 @@ func (fsys *osFS) CreateFile(name string) (io.WriteCloser, error) {
 	return fsys.createFileFunc(name)
 }
 
-func (fsys *osFS) runPlaylistCreator(songs []song, r io.Reader, w io.Writer) {
-	p := newPlaylist(songs, fsys, w)
+func (fsys *osFS) runPlaylistCreator(songs []song, r io.Reader, w io.Writer, showHash bool) {
+	p := newPlaylist(songs, fsys, w, showHash)
 	cmds := commands{
 		{"f", p.filter, "Filter songs with query: f <query>"},
 		{"d", p.printSongFilter, "Display filter'd songs by id"},

@@ -80,7 +80,7 @@ func TestRunPlaylistCreator(t *testing.T) {
 		w := io.Discard
 		var fsys osFS
 		var songs []song
-		fsys.runPlaylistCreator(songs, r, w)
+		fsys.runPlaylistCreator(songs, r, w, false)
 	})
 	t.Run("many", func(t *testing.T) {
 		songs := []song{
@@ -103,6 +103,7 @@ func TestRunPlaylistCreator(t *testing.T) {
 			"p",          // print tracks
 			"?",          // invalid command
 			"w curr.m3u", // write the playlist
+			"5",          // toggle hash mode
 			"q",          // stop evaluating commands
 		}
 		joinedCommands := strings.Join(commands, "\n")
@@ -131,7 +132,7 @@ func TestRunPlaylistCreator(t *testing.T) {
 				return &f, nil
 			},
 		}
-		fsys.runPlaylistCreator(songs, input, &output)
+		fsys.runPlaylistCreator(songs, input, &output, false)
 		switch {
 		case output.Len() == 0:
 			t.Errorf("no output written")
