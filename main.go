@@ -7,42 +7,33 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"runtime"
 	"strings"
-	"time"
 )
 
 func main() {
 	r := os.Stdin
 	w := os.Stdout
 	var showHash bool
+	var loadThreads int
 	flag.BoolVar(&showHash, "md5", false, "load md5sums for songs")
+	flag.IntVar(&loadThreads, "loadThreads", runtime.NumCPU(), "number of load threads")
 	flag.Parse()
-	start := time.Now()
-	t := time.NewTicker(1 * time.Second) // change to Millisecond when testing
-	go func() {
-		for range t.C {
-			fmt.Fprint(w, ".")
-		}
-	}()
 	fs := os.DirFS(".")
 	sr := songReader{
 		fsys:         fs,
 		addHash:      showHash,
+		loadThreads:  loadThreads,
 		pathSuffixes: []string{".mp3", ".m4a"},
 		// MP3, M4A, M4B, M4P, ALAC, FLAC, OGG, and DSF is supported by github.com/dhowden/tag
 	}
 	songs, err := sr.readSongs(w)
-	t.Stop()
-	if d := time.Since(start).Seconds(); d > 1 {
-		fmt.Fprintf(w, "\n> (loaded in %0.1f seconds)\n", d)
-	}
 	switch {
 	case err != nil:
 		fmt.Fprintf(w, "Error (reading songs): %v\n", err)
 	case len(songs) == 0:
 		fmt.Fprintf(w, "no songs in folder to add to playlists\n")
 	default:
-		fmt.Fprintf(w, "> loaded %d songs\n", len(songs))
 		fsys := osFS{
 			FS: fs,
 			createFileFunc: func(name string) (io.WriteCloser, error) {

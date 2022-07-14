@@ -1,7 +1,7 @@
 package main
 
 import (
-	"strings"
+	"io"
 	"testing"
 	"testing/fstest"
 )
@@ -39,7 +39,6 @@ func TestSongReaderReadSongs(t *testing.T) {
 		sr      songReader
 		want    []song
 		wantErr bool
-		wantLog bool
 	}{
 		{
 			name: "0 files => 0 songs, ok",
@@ -51,6 +50,7 @@ func TestSongReaderReadSongs(t *testing.T) {
 			name: "ok",
 			sr: songReader{
 				pathSuffixes: []string{".mp3"},
+				loadThreads:  2,
 				fsys: fstest.MapFS{
 					"a.mp3": &fstest.MapFile{
 						Data: emptyMP3,
@@ -124,7 +124,6 @@ func TestSongReaderReadSongs(t *testing.T) {
 					track:  1549,
 				},
 			},
-			wantLog: true,
 		},
 		{
 			name: "showHash",
@@ -149,10 +148,21 @@ func TestSongReaderReadSongs(t *testing.T) {
 			},
 		},
 	}
+	sortSongsByPath := func(slices ...[]song) {
+		for _, songs := range slices {
+			// insertion sort
+			for i := 1; i < len(songs); i++ {
+				for j := i; j > 0 && songs[j].path < songs[j-1].path; j-- {
+					songs[j], songs[j-1] = songs[j-1], songs[j]
+				}
+			}
+		}
+	}
 	songsEqual := func(a, b []song) bool {
 		if len(a) != len(b) {
 			return false
 		}
+		sortSongsByPath(a, b) // the goroutines add songs an unknown order
 		for i := range a {
 			if a[i] != b[i] {
 				return false
@@ -162,17 +172,14 @@ func TestSongReaderReadSongs(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			var w strings.Builder
-			got, err := test.sr.readSongs(&w)
-			gotLog := w.Len() != 0
+			w := io.Discard
+			got, err := test.sr.readSongs(w)
 			gotErr := err != nil
 			switch {
 			case test.wantErr != gotErr:
 				t.Errorf("wanted error: %v, got: %v", test.wantErr, err)
 			case !songsEqual(test.want, got):
 				t.Errorf("songs not equal: \n wanted: %v \n got:    %v", test.want, got)
-			case test.wantLog != gotLog:
-				t.Errorf("wanted log: %v, got %q", test.wantLog, w.String())
 			}
 		})
 	}
