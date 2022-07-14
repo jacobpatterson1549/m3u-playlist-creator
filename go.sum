@@ -1,2 +1,4 @@
 github.com/dhowden/tag v0.0.0-20220530110423-77907a30b7f1 h1:jD1A7flCBuwFb5PvK3B2u/jmUUZ2j3n3puR0F7peZWM=
 github.com/dhowden/tag v0.0.0-20220530110423-77907a30b7f1/go.mod h1:SniNVYuaD1jmdEEvi+7ywb1QFR7agjeTdGKyFb0p7Rw=
+golang.org/x/sys v0.0.0-20220712014510-0a85c31ab51e h1:NHvCuwuS43lGnYhten69ZWqi2QOj/CiDNcKbVqwVoew=
+golang.org/x/sys v0.0.0-20220712014510-0a85c31ab51e/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
