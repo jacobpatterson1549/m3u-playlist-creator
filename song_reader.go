@@ -51,7 +51,7 @@ func (sr songReader) readPaths(w io.Writer, paths []string) ([]song, error) {
 	format := fmt.Sprintf("%v> reading songs: [%%%dd/%d]\n", cursorUp, dc, len(paths))
 	resultID := 0
 	start := time.Now()
-	fmt.Println(w)
+	fmt.Fprintf(w, "\n")
 	for rr := range resultsC {
 		switch {
 		case rr.tagErr:
