@@ -219,7 +219,7 @@ func (p *playlist) load(m3uPath string) {
 		return
 	}
 	if _, err := p.ReadFrom(f); err != nil {
-		fmt.Fprintf(p.w, "Error (load playlist): %v", err)
+		fmt.Fprintf(p.w, "Error (load playlist): %v\n", err)
 	}
 }
 
@@ -267,7 +267,7 @@ func (p *playlist) ReadFrom(r io.Reader) (n int64, err error) {
 	case s.Err() != nil:
 		err = fmt.Errorf("reading playlist file: %v", err)
 	case len(errors) != 0:
-		err = fmt.Errorf("loading playlist songs: %v", strings.Join(errors, "\n"))
+		err = fmt.Errorf("loading playlist songs:\n%v", strings.Join(errors, "\n"))
 	}
 	p.tracks = tracks
 	return
